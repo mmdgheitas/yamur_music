@@ -3,6 +3,7 @@
 import type {
   BotRuntimeDTO,
   CategoryDTO,
+  ScheduleEntryDTO,
   SessionUserDTO,
   SongDTO,
   SystemConfigDTO,
@@ -193,11 +194,36 @@ export const api = {
 
   config: () => request<SystemConfigDTO>("/api/config"),
 
-  updateConfig: (payload: { allowGuestUpload?: boolean; cafeName?: string }) =>
+  updateConfig: (payload: {
+    allowGuestUpload?: boolean;
+    cafeName?: string;
+    scheduleTimezone?: string;
+  }) =>
     request<SystemConfigDTO>("/api/config", {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+
+  /** All daily playlist-schedule entries (public — clients run the scheduler). */
+  schedules: () => request<ScheduleEntryDTO[]>("/api/schedules"),
+
+  createSchedule: (payload: { label?: string; time: string; categoryId: string }) =>
+    request<ScheduleEntryDTO>("/api/schedules", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateSchedule: (
+    id: string,
+    payload: { label?: string; time?: string; categoryId?: string; enabled?: boolean },
+  ) =>
+    request<ScheduleEntryDTO>(`/api/schedules/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteSchedule: (id: string) =>
+    request<{ success: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
 
   updateProfile: async (payload: {
     username?: string;

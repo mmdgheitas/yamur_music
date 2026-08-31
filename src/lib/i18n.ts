@@ -168,6 +168,26 @@ export const en = {
   couldNotCheckUpdates: "Could not check for music updates",
   closeDialog: "Close dialog",
   sessionExpired: "Your session has expired. Please sign in again.",
+
+  // ---- Scheduled playlists ----
+  scheduleSection: "Scheduled playlists",
+  scheduleHint:
+    "At the set times, the chosen playlist starts right after the current song ends and then loops. Runs while this app is open.",
+  scheduleTimezone: "Schedule timezone",
+  scheduleTimezoneLocal: "Device local time",
+  scheduleTime: "Time (HH:MM)",
+  schedulePlaylist: "Playlist",
+  scheduleLabel: "Label (optional)",
+  scheduleAdd: "Add time",
+  scheduleEmpty: "No scheduled times yet — add one below.",
+  scheduleAdded: "Schedule added",
+  scheduleUpdated: "Schedule updated",
+  scheduleRemoved: "Schedule removed",
+  scheduleToggleError: "Could not update schedule",
+  scheduleFired: (label: string, time: string) =>
+    `Schedule ${time} — switching to "${label}" after the current track`,
+  scheduleEmptyPlaylist: (label: string) =>
+    `Schedule "${label}" fired but its playlist has no tracks`,
 } as const;
 
 export type Dictionary = typeof en;

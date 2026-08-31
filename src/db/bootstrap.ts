@@ -76,7 +76,7 @@ async function seedUsers(): Promise<void> {
 async function seedConfig(): Promise<void> {
   await db
     .insert(systemConfig)
-    .values({ id: 1, allowGuestUpload: false })
+    .values({ id: 1, allowGuestUpload: false, scheduleTimezone: "LOCAL" })
     .onConflictDoNothing({ target: systemConfig.id });
 }
 
@@ -166,7 +166,7 @@ export async function getSystemConfig() {
   if (row) return row;
   const [created] = await db
     .insert(systemConfig)
-    .values({ id: 1, allowGuestUpload: false })
+    .values({ id: 1, allowGuestUpload: false, scheduleTimezone: "LOCAL" })
     .onConflictDoUpdate({ target: systemConfig.id, set: { id: 1 } })
     .returning();
   return created;

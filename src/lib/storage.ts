@@ -88,6 +88,7 @@ export async function saveSongStream(
   const absolutePath = path.join(songsDir, storedName);
 
   let size = 0;
+  let overflowed = false;
   const limit = config.maxUploadBytes;
   const writeStream = fs.createWriteStream(absolutePath);
 
@@ -95,11 +96,12 @@ export async function saveSongStream(
     transform(chunk: Buffer, _encoding, callback) {
       size += chunk.byteLength;
       if (size > limit) {
-        callback(
-          new Error(
-            `File exceeds the ${(limit / 1024 / 1024).toFixed(0)} MB upload limit`,
-          ),
-        );
+        // Do NOT abort the pipeline: destroying the request body stream mid-flight
+        // makes Next.js throw an uncaught "ReadableStream is already closed" after
+        // the 400 is returned. Instead, keep consuming the body (it is already
+        // capped by the proxy layer) and drop everything past the limit.
+        overflowed = true;
+        callback(null, Buffer.alloc(0));
         return;
       }
       callback(null, chunk);
@@ -111,6 +113,13 @@ export async function saveSongStream(
   } catch (error) {
     await fsp.unlink(absolutePath).catch(() => undefined);
     throw badRequest(error instanceof Error ? error.message : "Upload stream failed");
+  }
+
+  if (overflowed) {
+    await fsp.unlink(absolutePath).catch(() => undefined);
+    throw badRequest(
+      `File exceeds the ${(limit / 1024 / 1024).toFixed(0)} MB upload limit`,
+    );
   }
 
   if (size === 0) {

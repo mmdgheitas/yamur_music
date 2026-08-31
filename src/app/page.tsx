@@ -34,6 +34,7 @@ export default async function HomePage() {
       initialConfig={{
         allowGuestUpload: config.allowGuestUpload,
         cafeName: config.cafeName,
+        scheduleTimezone: config.scheduleTimezone,
         updatedAt: config.updatedAt.toISOString(),
       }}
     />

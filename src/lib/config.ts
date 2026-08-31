@@ -16,7 +16,7 @@ export const config = {
     : path.join(process.cwd(), "uploads"),
   songDirName: "songs",
   seedAudioDir: path.join(process.cwd(), "seed-audio"),
-  maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 60 * 1024 * 1024),
+  maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 100 * 1024 * 1024),
   defaultAdmin: {
     username: process.env.ADMIN_USERNAME ?? "admin",
     password: process.env.ADMIN_PASSWORD ?? "cafe1404",
@@ -28,13 +28,10 @@ export const config = {
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN ?? "",
     /**
-     * api.telegram.org is filtered on some networks (Iran included), so the default
-     * points at the project's own Cloudflare Worker mirror. Override with
-     * TELEGRAM_API_ROOT=https://api.telegram.org on an unfiltered network.
+     * The bot always talks to the official Telegram Bot API directly.
+     * No proxy, mirror or intermediate API root is used.
      */
-    apiRoot:
-      process.env.TELEGRAM_API_ROOT ??
-      "https://telegram-proxy.yagmur-fazli99.workers.dev",
+    apiRoot: "https://api.telegram.org",
     webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? "",
     botUsername: process.env.TELEGRAM_BOT_USERNAME ?? "CafeMusicSyncBot",
   },

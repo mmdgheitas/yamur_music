@@ -36,7 +36,20 @@ export type SongDTO = {
 export type SystemConfigDTO = {
   allowGuestUpload: boolean;
   cafeName: string;
+  /** "LOCAL" = device clock; otherwise an IANA timezone name (e.g. "Asia/Tehran"). */
+  scheduleTimezone: string;
   updatedAt: string;
+};
+
+export type ScheduleEntryDTO = {
+  id: string;
+  label: string;
+  /** 24-hour "HH:MM" in the configured schedule timezone. */
+  time: string;
+  categoryId: string;
+  categoryName: string;
+  enabled: boolean;
+  createdAt: string;
 };
 
 export type TelegramContactDTO = {

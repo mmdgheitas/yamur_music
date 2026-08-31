@@ -85,7 +85,7 @@ function state(): RuntimeState {
 }
 
 function apiUrl(method: string): string {
-  // `apiRoot` may legitimately be a local mirror/proxy when api.telegram.org is blocked.
+  // The official Telegram Bot API endpoint; no mirror/proxy is involved.
   const root = config.telegram.apiRoot.trim().replace(/\/+$/, "");
   return `${root}/bot${config.telegram.token}/${method}`;
 }

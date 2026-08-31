@@ -70,9 +70,6 @@ async function downloadTelegramFile(bot: Telegraf, fileId: string): Promise<Buff
 
 function buildBot(token: string): Telegraf {
   const bot = new Telegraf(token, {
-    // Honour TELEGRAM_API_ROOT so a local mirror/proxy can be used when
-    // api.telegram.org is blocked. Trailing slashes break URL building.
-    telegram: { apiRoot: config.telegram.apiRoot.trim().replace(/\/+$/, "") },
     handlerTimeout: 120_000,
   });
 
@@ -299,7 +296,10 @@ export function getBot(): Telegraf | null {
   return cachedBot;
 }
 
-/** Lightweight reachability probe used by the admin panel (intranet-safe). */
+/**
+ * Lightweight reachability probe used by the admin panel (intranet-safe).
+ * Always targets the official Telegram Bot API — no proxy in between.
+ */
 export async function probeTelegram(timeoutMs = 4000): Promise<{
   reachable: boolean;
   message: string;

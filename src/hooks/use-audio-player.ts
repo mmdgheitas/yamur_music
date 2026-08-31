@@ -51,6 +51,12 @@ export function useAudioPlayer(
   queueRef.current = queue;
   const currentSongRef = useRef<SongDTO | null>(null);
   const playAttemptRef = useRef(0);
+  /**
+   * When a scheduled playlist fires while a track is playing, we do NOT interrupt
+   * the track: the schedule is parked here and taken over as soon as the current
+   * track naturally ends (`ended` event). `null` = no pending schedule.
+   */
+  const pendingScheduleRef = useRef<SongDTO[] | null>(null);
 
   const currentSong = useMemo(() => {
     const fromQueue = queue.find((song) => song.id === currentId);
@@ -196,6 +202,9 @@ export function useAudioPlayer(
       if (!song || song.id === currentId) return;
       // Cancel any pending automated transitions or previous play attempts.
       playAttemptRef.current += 1;
+      // The user picked a track — drop any parked schedule so it cannot hijack
+      // the queue later.
+      pendingScheduleRef.current = null;
       void loadAndPlay(song, true);
     },
     [currentId, loadAndPlay],
@@ -312,13 +321,53 @@ export function useAudioPlayer(
     const audio = audioRef.current;
     if (!audio) return;
     const onEnded = () => {
+      // A parked schedule takes over the moment the current track ends: swap the
+      // whole queue to the scheduled playlist, loop it, and start from its top.
+      const pending = pendingScheduleRef.current;
+      if (pending && pending.length > 0) {
+        pendingScheduleRef.current = null;
+        setShuffle(false);
+        setQueue(pending);
+        setRepeat("ALL");
+        if (audio) audio.currentTime = 0;
+        void loadAndPlay(pending[0], true);
+        return;
+      }
       // When the element naturally ends, advance using the live audio dataset
       // to compute the next track and start it.
       step(1, false);
     };
     audio.addEventListener("ended", onEnded);
     return () => audio.removeEventListener("ended", onEnded);
-  }, [audioRef, step]);
+  }, [audioRef, step, loadAndPlay, setQueue]);
+
+  /**
+   * Scheduled-playlist entry point: starts `categorySongs` right AFTER the track
+   * currently playing (never interrupting it), or immediately when nothing is
+   * playing. The scheduled playlist then repeats on itself.
+   */
+  const playCategoryAfterCurrent = useCallback(
+    (categorySongs: SongDTO[]) => {
+      if (!categorySongs || categorySongs.length === 0) return;
+      const audio = audioRef.current;
+      const active = currentSong ?? currentSongRef.current;
+      const actuallyPlaying = audio ? !audio.paused : isPlaying;
+
+      if (active && actuallyPlaying) {
+        // Park the schedule — the `ended` listener above takes it over.
+        pendingScheduleRef.current = categorySongs;
+        return;
+      }
+
+      // Nothing is playing (or it's paused): take over immediately.
+      pendingScheduleRef.current = null;
+      setShuffle(false);
+      setQueue(categorySongs);
+      setRepeat("ALL");
+      void loadAndPlay(categorySongs[0], true);
+    },
+    [currentSong, isPlaying, loadAndPlay, audioRef, setQueue],
+  );
 
   const seek = useCallback(
     (seconds: number) => {
@@ -372,5 +421,6 @@ export function useAudioPlayer(
     toggleShuffle,
     cycleRepeat,
     setQueue,
+    playCategoryAfterCurrent,
   };
 }

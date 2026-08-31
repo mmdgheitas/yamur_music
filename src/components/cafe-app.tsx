@@ -25,8 +25,10 @@ import { api, getStoredToken, setStoredToken } from "@/lib/client-api";
 import { accentClasses, formatDurationLong } from "@/lib/format";
 import { en } from "@/lib/i18n";
 import { fisherYates } from "@/hooks/use-audio-player";
+import { parseScheduleTime, wallClockParts } from "@/lib/schedule";
 import type {
   CategoryDTO,
+  ScheduleEntryDTO,
   SessionUserDTO,
   SongDTO,
   SystemConfigDTO,
@@ -50,6 +52,7 @@ export function CafeApp({
   const [activeCategoryId, setActiveCategoryId] = useState(initialCategoryId);
   const [songs, setSongs] = useState<SongDTO[]>(initialSongs);
   const [config, setConfig] = useState<SystemConfigDTO>(initialConfig);
+  const [schedules, setSchedules] = useState<ScheduleEntryDTO[]>([]);
   const [loadingSongs, setLoadingSongs] = useState(false);
   const [query, setQuery] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -193,6 +196,85 @@ export function CafeApp({
     }, 5000);
     return () => window.clearInterval(interval);
   }, [activeCategoryId, refreshSongsIfNeeded]);
+
+  // Load the daily playlist schedule once; the engine below runs on every client.
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .schedules()
+      .then((next) => {
+        if (!cancelled) setSchedules(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * Scheduled-playlists engine.
+   *
+   * Every second, the current wall-clock time (in the configured timezone) is
+   * compared with each enabled entry. When the set time is hit (with a small
+   * catch-up window so throttled background tabs still fire), the chosen playlist
+   * is fetched and handed to the player, which starts it right after the current
+   * track ends and then loops it. Entries never fire twice on the same day.
+   */
+  const firedScheduleKeysRef = useRef<Set<string>>(new Set());
+  const lastPruneDayRef = useRef("");
+
+  useEffect(() => {
+    if (schedules.length === 0) return;
+    const tz = config.scheduleTimezone;
+
+    const check = () => {
+      const now = new Date();
+      const clock = wallClockParts(now, tz);
+      const dayKey = `${clock.year}-${clock.month}-${clock.day}`;
+      if (lastPruneDayRef.current !== dayKey) {
+        lastPruneDayRef.current = dayKey;
+        firedScheduleKeysRef.current.clear();
+      }
+
+      const nowMinutes = clock.hour * 60 + clock.minute;
+      const due = schedules.filter((entry) => {
+        if (!entry.enabled) return false;
+        const parsed = parseScheduleTime(entry.time);
+        if (!parsed) return false;
+        const elapsed = nowMinutes - (parsed.hour * 60 + parsed.minute);
+        // Only fire at/after the set time, within a 2-minute catch-up window,
+        // and never more than once per day per entry.
+        if (elapsed < 0 || elapsed > 2) return false;
+        const key = `${entry.id}:${dayKey}`;
+        return !firedScheduleKeysRef.current.has(key);
+      });
+      if (due.length === 0) return;
+
+      // Mark every due entry as fired today; the newest created one wins the minute.
+      for (const entry of due) {
+        firedScheduleKeysRef.current.add(`${entry.id}:${dayKey}`);
+      }
+      const target = due.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+
+      void (async () => {
+        try {
+          const targetSongs = await api.songs(target.categoryId);
+          const displayName = target.label || target.categoryName;
+          if (targetSongs.length === 0) {
+            notify(en.scheduleEmptyPlaylist(displayName), "info");
+            return;
+          }
+          audioPlayer.playCategoryAfterCurrent(targetSongs);
+          notify(en.scheduleFired(displayName, target.time), "info");
+        } catch {
+          /* transient network failure — a later poll re-evaluates */
+        }
+      })();
+    };
+
+    const interval = window.setInterval(check, 1000);
+    return () => window.clearInterval(interval);
+  }, [schedules, config.scheduleTimezone, audioPlayer, notify]);
 
   // Restore the session from the stored Bearer token when the cookie is unavailable
   // (e.g. the app is embedded in a cross-site iframe that blocks third-party cookies).
@@ -515,6 +597,9 @@ export function CafeApp({
           onUserChange={setUser}
           notify={notify}
           stats={{ songCount: totalTracks, categoryCount: categories.length }}
+          categories={categories}
+          schedules={schedules}
+          setSchedules={setSchedules}
         />
       ) : null}
 

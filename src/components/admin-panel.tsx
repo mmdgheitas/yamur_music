@@ -20,10 +20,13 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Button, Field, Modal, Switch, inputClass } from "@/components/ui";
+import { ScheduleManager } from "@/components/schedule-manager";
 import { api } from "@/lib/client-api";
 import { en } from "@/lib/i18n";
 import type {
   BotRuntimeDTO,
+  CategoryDTO,
+  ScheduleEntryDTO,
   SessionUserDTO,
   SystemConfigDTO,
   TelegramStatusDTO,
@@ -38,6 +41,9 @@ export function AdminPanel({
   onUserChange,
   notify,
   stats,
+  categories,
+  schedules,
+  setSchedules,
 }: {
   open: boolean;
   onClose: () => void;
@@ -47,6 +53,9 @@ export function AdminPanel({
   onUserChange: (next: SessionUserDTO) => void;
   notify: (message: string, tone?: "success" | "error" | "info") => void;
   stats: { songCount: number; categoryCount: number };
+  categories: CategoryDTO[];
+  schedules: ScheduleEntryDTO[];
+  setSchedules: (next: ScheduleEntryDTO[]) => void;
 }) {
   const [telegram, setTelegram] = useState<TelegramStatusDTO | null>(null);
   const [loading, setLoading] = useState(false);
@@ -488,6 +497,15 @@ export function AdminPanel({
             )}
           </div>
         </div>
+
+        <ScheduleManager
+          config={config}
+          onConfigChange={onConfigChange}
+          categories={categories}
+          schedules={schedules}
+          setSchedules={setSchedules}
+          notify={notify}
+        />
       </div>
     </Modal>
   );

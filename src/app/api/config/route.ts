@@ -12,11 +12,13 @@ export const dynamic = "force-dynamic";
 function serialize(row: {
   allowGuestUpload: boolean;
   cafeName: string;
+  scheduleTimezone: string;
   updatedAt: Date;
 }): SystemConfigDTO {
   return {
     allowGuestUpload: row.allowGuestUpload,
     cafeName: row.cafeName,
+    scheduleTimezone: row.scheduleTimezone,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -27,7 +29,7 @@ export const GET = withErrorHandling(async () => {
   return jsonOk(serialize(await getSystemConfig()));
 });
 
-/** PATCH /api/config (Admin) -> Body: { allowGuestUpload: boolean, cafeName?: string } */
+/** PATCH /api/config (Admin) -> Body: { allowGuestUpload, cafeName?, scheduleTimezone? } */
 export const PATCH = withErrorHandling(async (request: Request) => {
   await ensureBootstrap();
   await requireAdmin(request);
@@ -40,8 +42,19 @@ export const PATCH = withErrorHandling(async (request: Request) => {
   if (typeof body.cafeName === "string" && body.cafeName.trim()) {
     patch.cafeName = body.cafeName.trim().slice(0, 60);
   }
+  if (typeof body.scheduleTimezone === "string" && body.scheduleTimezone.trim()) {
+    const timezone = body.scheduleTimezone.trim().slice(0, 64);
+    if (!/^[A-Za-z0-9_+\-/]{1,64}$/.test(timezone)) {
+      throw badRequest(
+        'scheduleTimezone must be "LOCAL" or a valid IANA timezone name (e.g. Asia/Tehran)',
+      );
+    }
+    patch.scheduleTimezone = timezone;
+  }
   if (Object.keys(patch).length === 1) {
-    throw badRequest("Provide allowGuestUpload (boolean) and/or cafeName (string)");
+    throw badRequest(
+      "Provide allowGuestUpload (boolean), cafeName (string) and/or scheduleTimezone (string)",
+    );
   }
 
   await getSystemConfig();

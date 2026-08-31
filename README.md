@@ -65,10 +65,14 @@ VPS install is playable immediately, offline.
 | `GET /api/config` | public | `{ allowGuestUpload, cafeName, updatedAt }` |
 | `PATCH /api/config` | ADMIN | `{ allowGuestUpload?, cafeName? }` |
 | `GET /api/stream/:id` | public | audio bytes, `Accept-Ranges: bytes`, `206 Partial Content`, `416` on bad range |
-| `GET/POST/DELETE /api/telegram` | ADMIN | bot reachability probe + whitelist CRUD |
+| `GET/POST /api/telegram` | ADMIN | bot reachability probe + whitelist CRUD |
 | `GET/POST /api/telegram/runtime` | ADMIN | start/stop the bot from the UI (`{ action: "start" \| "stop" }`) — the in-app `npm run bot` |
 | `POST /api/telegram/webhook` | Telegram | webhook transport (optional secret token header) |
+| `GET/POST /api/schedules` | GET public, POST ADMIN | daily playlist-schedule entries (`{ time: "HH:MM", categoryId, label? }`) |
+| `PATCH/DELETE /api/schedules/:id` | ADMIN | retime / rename / move / toggle / delete a schedule |
 | `GET /api/health` | public | DB, storage, telegram and library status |
+
+`PATCH /api/config` additionally accepts `scheduleTimezone` (`"LOCAL"` or an IANA name like `"Asia/Tehran"`).
 
 Every handler is wrapped in `withErrorHandling` (`src/lib/http.ts`) → structured
 `{ error, code }` JSON with the right HTTP status; no unhandled promise rejections.
@@ -105,15 +109,15 @@ Environment (`.env`):
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/app_db
 JWT_SECRET=change-me
 UPLOAD_DIR=./uploads
-MAX_UPLOAD_BYTES=62914560
+MAX_UPLOAD_BYTES=104857600
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=cafe1404
 GUEST_USERNAME=barista
 GUEST_PASSWORD=guest1404
 TELEGRAM_BOT_TOKEN=            # empty = bot disabled, web app unaffected
 TELEGRAM_BOT_USERNAME=CafeMusicSyncBot
-TELEGRAM_API_ROOT=https://api.telegram.org
 TELEGRAM_WEBHOOK_SECRET=
+MAX_UPLOAD_BYTES=104857600      # default 100 MB for web uploads and Telegram downloads
 ```
 
 Schema is applied automatically at runtime; to sync manually use `npx drizzle-kit push`.
@@ -210,8 +214,18 @@ curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
 The worker logs `launch failed … retrying in Ns` and keeps retrying with exponential
 backoff (5 s → 2 min); the admin panel shows *"Telegram unreachable … Local playback and
 uploads keep working."* Nothing in the cafe player degrades — playback, uploads, reordering
-and streaming are entirely local. Set `TELEGRAM_API_ROOT` if you proxy the API through a
-reachable mirror.
+and streaming are entirely local.
+
+The bot always connects to the official Telegram Bot API (`https://api.telegram.org`)
+directly — no mirror or proxy is used.
+
+> **Telegram download size.** The app's own limit is 100 MB (`MAX_UPLOAD_BYTES`), but the
+> Telegram Bot API itself only allows a bot to download files **up to 20 MB**. Audio files
+> larger than that will be rejected by Telegram with `file is too big` before they reach
+> this app. The only way to raise that cap is a self-hosted
+> [Telegram local Bot API server](https://core.telegram.org/bots/api#using-a-local-bot-api-server)
+> with `--local` mode, which is outside the scope of this project; on a standard setup the
+> effective Telegram limit stays at 20 MB.
 
 ---
 
@@ -225,6 +239,40 @@ seek bar with scrub preview · volume slider + mute · Fisher–Yates shuffle ba
 until the bag is exhausted) · repeat off/all/one · buffering + error states · keyboard
 transport (`Space`, `←/→` ±5 s, `Shift+←/→` track skip, `M` mute) · drag-and-drop reordering
 for admins with optimistic UI and automatic rollback if the server rejects the change.
+
+---
+
+## 8. Scheduled playlists
+
+Set **daily times** and the app switches playlists automatically: when the clock hits
+the set time, the chosen playlist starts **right after the current song ends**, then
+**loops** until someone changes the music manually.
+
+**Configuration** — Sign in as admin → **Admin** → *Scheduled playlists*:
+
+1. **Timezone**: *Device local time* (the clock of the machine running the app — the
+   cafe's always-on device) or a fixed IANA zone (e.g. `Asia/Tehran`). A live clock
+   in the panel shows the current time in that timezone, so there is no guessing.
+2. **Add a time**: `HH:MM` (24-hour) + a playlist (+ optional label) → **Add time**.
+3. Each entry can be **enabled/disabled** or **deleted** in the list.
+
+**How it works**
+
+* The engine runs **in the browser** of every open client (it needs no server
+  scheduling), so it fires as long as at least one tab has the web app open — typically
+  the cafe device that is left running all day.
+* When the set time is hit, the playlist's tracks are loaded and queued **after the
+  currently playing track** — the current song is never interrupted mid-way.
+* When that current track ends, the scheduled playlist starts from its first track and
+  **repeats on itself** (`repeat: all`). The repeat mode stays at `all` until changed.
+* If nothing is playing when the time hits, the scheduled playlist starts immediately.
+* Each entry fires **once per day**; if the app was closed or the tab asleep past the
+  window, the entry waits for the next day rather than firing late.
+* If a playlist is deleted, its schedules are removed with it.
+
+**Storage**: entries live in a new `schedule_entries` table; the timezone lives in
+`system_config.schedule_timezone` (created automatically by the runtime bootstrap on
+existing installs — no manual migration needed).
 
 ---
 
@@ -252,9 +300,8 @@ for admins with optimistic UI and automatic rollback if the server rejects the c
   now also returns `categoryStats` (scoped to the requested playlist), the client
   compares like with like, and the poll additionally skips refetching while the user is
   viewing a locally shuffled order.
-* **Telegram API root:** `TELEGRAM_API_ROOT` is now honoured everywhere. It defaults to
-  the project's Cloudflare Worker mirror because `api.telegram.org` is filtered on some
-  networks; set it to `https://api.telegram.org` on an unfiltered one. The previous
-  hard-coded value contained a trailing space, which broke request URLs.
+* **Telegram API root:** the bot now talks to the official `https://api.telegram.org`
+  endpoint directly. The previous Cloudflare Worker mirror (`TELEGRAM_API_ROOT`) has been
+  removed from the code and from `.env` — the variable is no longer honoured.
 * **Fonts:** unchanged from the original (`Inter` + system stack), resolved locally with
   no network fetch so the app stays fully offline-capable.

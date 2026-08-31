@@ -24,6 +24,8 @@ type AudioPlayerContextValue = {
   cycleRepeat: () => void;
   setQueue: (songs: SongDTO[]) => void;
   setCategoryName: (name: string) => void;
+  /** Scheduled playlists: start these tracks after the current song ends (or now). */
+  playCategoryAfterCurrent: (songs: SongDTO[]) => void;
 };
 
 const AudioPlayerContext = createContext<AudioPlayerContextValue | null>(null);
@@ -51,6 +53,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       cycleRepeat: player.cycleRepeat,
       setQueue: player.setQueue,
       setCategoryName,
+      playCategoryAfterCurrent: player.playCategoryAfterCurrent,
     }),
     [player],
   );

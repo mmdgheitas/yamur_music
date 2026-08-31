@@ -18,6 +18,10 @@ const nextConfig: NextConfig = {
       // Large audio uploads flow through route handlers, but keep head
       bodySizeLimit: "64mb",
     },
+    // Next 16's proxy layer truncates request bodies at 10MB by default, which
+    // would silently chop large audio uploads. Raise it past the app's 100MB
+    // upload cap so the streamed /api/songs/upload body arrives intact.
+    proxyClientMaxBodySize: "105mb",
   },
 };
 

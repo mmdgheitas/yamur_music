@@ -73,8 +73,35 @@ export const systemConfig = pgTable("system_config", {
   id: integer("id").primaryKey().default(1),
   allowGuestUpload: boolean("allow_guest_upload").notNull().default(false),
   cafeName: text("cafe_name").notNull().default("Kavé Nour"),
+  /**
+   * Timezone used by the scheduled-playlist engine. "LOCAL" means the browser/device
+   * clock of whichever machine runs the web app; any other value is an IANA zone
+   * name (e.g. "Asia/Tehran") interpreted in every client the same way.
+   */
+  scheduleTimezone: text("schedule_timezone").notNull().default("LOCAL"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Daily playlist schedule: when the wall clock (in `system_config.schedule_timezone`)
+ * hits `time`, the engine starts playing `category_id` right after the current song
+ * ends, then loops that playlist.
+ */
+export const scheduleEntries = pgTable(
+  "schedule_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    label: text("label").notNull().default(""),
+    /** 24-hour "HH:MM" in the configured schedule timezone. */
+    time: text("time").notNull(),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("schedule_entries_time_idx").on(table.time)],
+);
 
 export const telegramWhitelist = pgTable(
   "telegram_whitelist",
@@ -103,6 +130,7 @@ export type CategoryRow = typeof categories.$inferSelect;
 export type SongRow = typeof songs.$inferSelect;
 export type SystemConfigRow = typeof systemConfig.$inferSelect;
 export type TelegramWhitelistRow = typeof telegramWhitelist.$inferSelect;
+export type ScheduleEntryRow = typeof scheduleEntries.$inferSelect;
 
 /** Raw idempotent DDL, used by the runtime bootstrapper on fresh/self-hosted installs. */
 export const BOOTSTRAP_SQL = sql`
@@ -158,6 +186,17 @@ export const BOOTSTRAP_SQL = sql`
     "cafe_name" text NOT NULL DEFAULT 'Kavé Nour',
     "updated_at" timestamptz NOT NULL DEFAULT now()
   );
+  ALTER TABLE "system_config" ADD COLUMN IF NOT EXISTS "schedule_timezone" text NOT NULL DEFAULT 'LOCAL';
+
+  CREATE TABLE IF NOT EXISTS "schedule_entries" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    "label" text NOT NULL DEFAULT '',
+    "time" text NOT NULL,
+    "category_id" uuid NOT NULL REFERENCES "categories"("id") ON DELETE CASCADE,
+    "enabled" boolean NOT NULL DEFAULT true,
+    "created_at" timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS "schedule_entries_time_idx" ON "schedule_entries" ("time");
 
   CREATE TABLE IF NOT EXISTS "telegram_whitelist" (
     "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
