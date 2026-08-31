@@ -1,0 +1,11 @@
+/node_modules
+/.next
+
+
+# local environment (never commit secrets)
+.env
+.env.local
+.env*.local
+
+# build info
+tsconfig.tsbuildinfo
