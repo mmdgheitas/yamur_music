@@ -266,7 +266,16 @@ export function PlayerDock({
         </div>
       </div>
 
-      {state.error ? (
+      {state.autoplayBlocked ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center justify-center gap-2 border-t border-amber-400/25 bg-amber-500/10 px-4 py-1.5 text-center text-[11px] text-amber-100 transition hover:bg-amber-500/15"
+        >
+          <Play className="h-3 w-3 shrink-0" />
+          {en.autoplayBlocked}
+        </button>
+      ) : state.error ? (
         <p className="border-t border-rose-400/20 bg-rose-500/10 px-4 py-1.5 text-center text-[11px] text-rose-200">
           {state.error}
         </p>

@@ -64,6 +64,8 @@ export const en = {
   repeatLabel: (mode: string) =>
     `Repeat: ${mode === "ONE" ? "one" : mode === "ALL" ? "all" : "off"}`,
   playbackError: "Playback failed — the audio file may be missing on the server.",
+  autoplayBlocked:
+    "The browser blocked autoplay — press play or tap anywhere to start the music.",
 
   // ---- Auth ----
   loginTitle: "Staff sign in",

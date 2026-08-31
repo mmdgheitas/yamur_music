@@ -266,6 +266,11 @@ the set time, the chosen playlist starts **right after the current song ends**, 
 * When that current track ends, the scheduled playlist starts from its first track and
   **repeats on itself** (`repeat: all`). The repeat mode stays at `all` until changed.
 * If nothing is playing when the time hits, the scheduled playlist starts immediately.
+* **Browser autoplay policy**: if the set time hits before anyone has interacted with
+  the page, the browser may block automatic playback (a `NotAllowedError`). The app
+  handles this gracefully — the scheduled playlist is loaded and selected, an amber
+  hint appears in the player dock ("press play or tap anywhere to start"), and the
+  first tap/click anywhere starts it. It is never shown as a playback failure.
 * Each entry fires **once per day**; if the app was closed or the tab asleep past the
   window, the entry waits for the next day rather than firing late.
 * If a playlist is deleted, its schedules are removed with it.

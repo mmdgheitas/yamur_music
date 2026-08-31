@@ -27,6 +27,12 @@ export type PlayerState = {
   repeat: RepeatMode;
   isBuffering: boolean;
   error: string | null;
+  /**
+   * True when the browser rejected an automatic play() because of the autoplay
+   * policy (no user gesture yet). The track stays loaded and selected; one tap
+   * anywhere or on the dock's play button starts it.
+   */
+  autoplayBlocked: boolean;
   queue: SongDTO[];
 };
 
@@ -45,6 +51,7 @@ export function useAudioPlayer(
   const [repeat, setRepeat] = useState<RepeatMode>("ALL");
   const [isBuffering, setIsBuffering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [shuffleOrder, setShuffleOrder] = useState<string[]>([]);
 
   const queueRef = useRef(queue);
@@ -87,6 +94,7 @@ export function useAudioPlayer(
       setIsBuffering(false);
       setIsPlaying(true);
       setError(null);
+      setAutoplayBlocked(false);
     };
     const onPause = () => setIsPlaying(false);
     const onErr = () => {
@@ -182,13 +190,32 @@ export function useAudioPlayer(
         setIsBuffering(false);
         setIsPlaying(true);
       } catch (err) {
+        const name = (err as DOMException | undefined)?.name;
+
+        if (name === "NotAllowedError") {
+          // The browser blocked autoplay: play() was called without a user
+          // gesture (e.g. a scheduled playlist fired while nobody interacted
+          // with the page). This is NOT a playback failure — keep the track
+          // loaded and selected so one tap (dock button, Space, or anywhere
+          // on the page) starts it. Nothing is logged to the console.
+          setIsBuffering(false);
+          setIsPlaying(false);
+          if (playAttemptRef.current === attempt) {
+            setCurrentId(song.id);
+            currentSongRef.current = song;
+          }
+          setAutoplayBlocked(true);
+          setError(null);
+          return;
+        }
+
         // Ensure audio is stopped and do not auto-advance the index.
         try {
           audio.pause();
         } catch {}
         setIsBuffering(false);
         setIsPlaying(false);
-        if ((err as DOMException)?.name !== "AbortError") {
+        if (name !== "AbortError") {
           console.error("[player] playback failed:", err);
           setError(en.playbackError);
         }
@@ -230,6 +257,7 @@ export function useAudioPlayer(
           if (playAttemptRef.current !== attempt) return;
           setIsPlaying(true);
           setError(null);
+          setAutoplayBlocked(false);
           // If currentId wasn't set (e.g. autoplay blocked earlier), sync it
           // with the actually loaded source.
           if (!currentId && audio.dataset.songId) {
@@ -239,10 +267,38 @@ export function useAudioPlayer(
           }
         })
         .catch((err) => {
+          // A play() triggered by a real user gesture should not be blocked,
+          // but if the browser still refuses, don't surface it as an error.
+          if ((err as DOMException)?.name === "NotAllowedError") return;
           console.warn("Playback error:", err);
         });
     }
   }, [audioRef, currentSong, currentId]);
+
+  /**
+   * Autoplay-policy workaround: when the browser rejected an automatic play()
+   * (e.g. a scheduled playlist fired with no user interaction yet), the track is
+   * loaded but paused. Any click on the page counts as a user gesture, so retry
+   * playback then — one tap anywhere in the cafe starts the music.
+   *
+   * `click` is used instead of `pointerdown` so a fast-starting local file cannot
+   * race the dock/banner button's own toggle (which would pause it right back).
+   * Interactive controls are skipped — they have their own gesture-driven
+   * handlers (the dock play button, the amber banner, Space in the key handler).
+   */
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const resume = (event: MouseEvent) => {
+      if (!autoplayBlocked) return;
+      if (!audio.dataset.songId || !audio.paused) return;
+      const target = event.target as Element | null;
+      if (target?.closest("button, a, input, select, textarea")) return;
+      void audio.play().catch(() => undefined);
+    };
+    window.addEventListener("click", resume);
+    return () => window.removeEventListener("click", resume);
+  }, [audioRef, autoplayBlocked]);
 
   const pause = useCallback(() => {
     audioRef.current?.pause();
@@ -404,6 +460,7 @@ export function useAudioPlayer(
     repeat,
     isBuffering,
     error,
+    autoplayBlocked,
     queue,
   };
 
