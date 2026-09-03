@@ -9,3 +9,7 @@
 
 # build info
 tsconfig.tsbuildinfo
+
+# generated demo tracks (node scripts/generate-seed-audio.mjs)
+seed-audio/
+uploads/songs/seed-*
