@@ -91,6 +91,18 @@ export function CafeApp({
 
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
   const audioPlayer = useAudioPlayerContext();
+  /**
+   * `audioPlayer` is the player context value, which is re-created on every render
+   * (the provider memoises on the player object, and the player returns a fresh
+   * object each render). While music plays, `timeupdate` re-renders several times a
+   * second, so anything that lists `audioPlayer` in a dependency array is torn down
+   * and rebuilt constantly. The schedule engine below reads the player through this
+   * ref so its 1-second interval is never destroyed mid-playback.
+   */
+  const audioPlayerRef = useRef(audioPlayer);
+  useEffect(() => {
+    audioPlayerRef.current = audioPlayer;
+  });
 
   const refreshCategories = useCallback(async () => {
     try {
@@ -264,7 +276,7 @@ export function CafeApp({
             notify(en.scheduleEmptyPlaylist(displayName), "info");
             return;
           }
-          audioPlayer.playCategoryAfterCurrent(targetSongs);
+          audioPlayerRef.current.playCategoryAfterCurrent(targetSongs);
           notify(en.scheduleFired(displayName, target.time), "info");
         } catch {
           /* transient network failure — a later poll re-evaluates */
@@ -274,7 +286,7 @@ export function CafeApp({
 
     const interval = window.setInterval(check, 1000);
     return () => window.clearInterval(interval);
-  }, [schedules, config.scheduleTimezone, audioPlayer, notify]);
+  }, [schedules, config.scheduleTimezone, notify]);
 
   // Restore the session from the stored Bearer token when the cookie is unavailable
   // (e.g. the app is embedded in a cross-site iframe that blocks third-party cookies).
